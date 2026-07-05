@@ -4,7 +4,7 @@ Aplicación web de gestión CRUD de productos, desarrollada como parte de la asi
 
 ## Descripción del proyecto
 
-La aplicación permite gestionar el catálogo de productos de una tienda de alimentos para mascotas (crear, editar, eliminar y listar productos). Está pensada como un caso práctico de orquestación y automatización en la nube para la empresa ficticia **Innovatech Chile**.
+La aplicación permite gestionar el catálogo de productos de una tienda de alimentos para mascotas (crear, editar, eliminar y listar productos). Está pensada como un caso práctico de orquestación y automatización en la nube para Tienda Perritos.
 
 ## Arquitectura
 
