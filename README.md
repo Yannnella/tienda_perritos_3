@@ -1,4 +1,4 @@
-﻿# Tienda de Alimentos para Perritos 
+# Tienda de Alimentos para Perritos
 
 Aplicación web de gestión CRUD de productos, desarrollada como parte de la asignatura **Introducción a Herramientas DevOps (ISY1101)**. El proyecto está compuesto por tres servicios (frontend, backend y base de datos) contenerizados con Docker y desplegados en un clúster **Amazon EKS**, con un pipeline de integración y entrega continua (CI/CD) automatizado mediante **GitHub Actions**.
 
@@ -21,8 +21,8 @@ La aplicación permite gestionar el catálogo de productos de una tienda de alim
 - **Frontend:** servido con Nginx, expone la interfaz de usuario y consume la API del backend.
 - **Backend:** API REST en Node.js/Express, gestiona la lógica de negocio y la conexión a la base de datos.
 - **Base de datos:** MySQL, con persistencia y credenciales gestionadas mediante Kubernetes Secrets.
-- **Clúster:** Amazon EKS (`tienda-perritos-eks-cluster`, región `us-east-1`), respaldado por una VPC con subredes públicas y privadas.
-- **Registro de imágenes:** Amazon ECR (un repositorio por servicio).
+- **Clúster:** Amazon EKS (`tienda-eks`, Kubernetes 1.36, región `us-east-1`), respaldado por una VPC con subredes públicas y privadas.
+- **Registro de imágenes:** Amazon ECR (un repositorio por servicio: `tienda-frontend`, `tienda-backend`, `tienda-db`).
 - **Autoscaling:** Horizontal Pod Autoscaler (HPA) en frontend y backend, basado en uso de CPU.
 - **CI/CD:** GitHub Actions automatiza build → push a ECR → deploy en EKS ante cada push a `main`.
 
@@ -31,6 +31,7 @@ La aplicación permite gestionar el catálogo de productos de una tienda de alim
 ```
 ├── backend/                 # Código fuente y Dockerfile del backend
 ├── frontend/                # Código fuente y Dockerfile del frontend
+├── db/                      # Dockerfile e init.sql de la base de datos
 ├── k8s/                     # Manifiestos de Kubernetes
 │   ├── namespace.yaml
 │   ├── mysql-secret.yaml
@@ -57,7 +58,62 @@ La aplicación permite gestionar el catálogo de productos de una tienda de alim
 1. **Autenticarse en AWS y en ECR:**
    ```bash
    aws configure
-   aws eks update-kubeconfig --region us-east-1 --name tienda-perritos-eks-cluster
+   aws eks update-kubeconfig --region us-east-1 --name tienda-eks
+   aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-east-1.amazonaws.com
+   ```
+
+2. **Construir y publicar las imágenes en ECR:**
+   ```bash
+   docker build -t tienda-frontend ./frontend
+   docker tag tienda-frontend:latest <account-id>.dkr.ecr.us-east-1.amazonaws.com/tienda-frontend:latest
+   docker push <account-id>.dkr.ecr.us-east-1.amazonaws.com/tienda-frontend:latest
+   ```
+   (repetir para `backend` y `db`)
+
+3. **Desplegar en el clúster:**
+   ```bash
+   kubectl apply -f k8s/namespace.yaml
+   kubectl apply -f k8s/mysql-secret.yaml -n tienda
+   kubectl apply -f k8s/mysql-deployment.yaml -n tienda
+   kubectl apply -f k8s/mysql-service.yaml -n tienda
+   kubectl apply -f k8s/backend-deployment.yaml -n tienda
+   kubectl apply -f k8s/backend-service.yaml -n tienda
+   kubectl apply -f k8s/backend-hpa.yaml -n tienda
+   kubectl apply -f k8s/frontend-deployment.yaml -n tienda
+   kubectl apply -f k8s/frontend-service.yaml -n tienda
+   kubectl apply -f k8s/frontend-hpa.yaml -n tienda
+   ```
+
+4. **Verificar el despliegue:**
+   ```bash
+   kubectl get pods -n tienda
+   kubectl get svc -n tienda
+   ```
+   La URL pública de la aplicación queda disponible en el campo `EXTERNAL-IP` del servicio `tienda-frontend` (tipo LoadBalancer).
+
+## Despliegue automatizado (CI/CD)
+
+Ante cada `push` a la rama `main`, el workflow definido en `.github/workflows/` ejecuta automáticamente:
+
+1. Checkout del código.
+2. Autenticación en AWS y login a Amazon ECR.
+3. Build y push de las imágenes (frontend, backend, db) etiquetadas con los primeros 7 caracteres del commit SHA.
+4. Aplicación de los manifiestos base (namespace, base de datos y servicios).
+5. Actualización de los deployments de backend y frontend en EKS con las nuevas imágenes.
+6. Aplicación de los HPA.
+7. Verificación final del estado de pods y servicios.
+
+Los secrets necesarios (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION`, `EKS_CLUSTER_NAME`, `EKS_NAMESPACE`) se configuran en **Settings → Secrets and variables → Actions** del repositorio.
+
+## Entorno de desarrollo local
+
+Para levantar el entorno completo en local con Docker Compose:
+
+```bash
+docker-compose up
+```
+
+Esto inicia los 4 servicios (frontend, backend, base de datos e info), este último mostrando en consola las URLs disponibles una vez que todo está listo.
    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
    ```
 
