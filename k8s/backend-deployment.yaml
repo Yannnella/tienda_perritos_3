@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: 370227408191.dkr.ecr.us-east-1.amazonaws.com/tienda-backend:eks-v1 # Colocar uri de tu imagen en ECR
+          image: 310903068582.dkr.ecr.us-east-1.amazonaws.com/tienda-backend:latest # Colocar uri de tu imagen en ECR
           ports:
             - containerPort: 3001
           env:

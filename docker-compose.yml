@@ -1,0 +1,122 @@
+version: "3.8" # Define la versión del formato de Docker Compose que se usará
+
+# Acá es donde se definen todos los contenedores del sistema.
+services:
+
+  # FRONTEND
+  # Parte visual de la aplicación, es lo que se abre en el navegador y se puede ver visualmente.
+  frontend:
+    # Usa los archivos de la carpeta frontend para crear esta parte del sistema
+    build: ./frontend
+    # Nombre del contenedor para identificarlo fácilmente, administrarlo o ver sus registros).
+    container_name: tienda-frontend 
+    # Define por dónde se puede entrar a la pagina desde el navegador
+    ports:
+      - "${FRONTEND_PORT}:80" # Permite entrar desde el navegador por el puerto definido; toma el valor desde .env
+    depends_on:
+      - backend # Espera a que el backend esté iniciado antes de arrancar
+
+
+  # BACKEND
+  # Parte del sistema que procesa información y se comunica con la base de datos.
+  backend:
+    # Usa los archivos de la carpeta backend para crear esta parte del sistema
+    build: ./backend
+    # Nombre del contenedor para identificarlo fácilmente, administrarlo o ver sus registros).
+    container_name: tienda-backend
+
+    # environment guarda datos que el backend necesita para funcionar, cómo por ej: conectarse a la base de datos
+    environment:
+      # DB_HOST indica dónde está la base de datos; en este caso toma el valor de la variable de entorno definida fuera de este archivo, en .env
+      DB_HOST: ${DB_HOST}
+      # DB_USER indica el usuario para conectarse; toma el valor desde .env
+      DB_USER: ${DB_USER}
+      # Contraseña para conectarse, tomada desde el archivo .env
+      DB_PASSWORD: ${DB_ROOT_PASSWORD}
+      # DB_NAME indica el nombre de la base de datos; toma el valor desde .env
+      DB_NAME: ${DB_NAME}
+      # DB_PORT indica el puerto para conectarse; toma el valor desde .env
+      DB_PORT: ${DB_PORT}
+
+    # ports define por qué puerto se puede acceder al backend en este caso usa el valor de BACKEND_PORT definido en .env
+    ports:
+      - "${BACKEND_PORT}:3001"
+
+    # depends_on indica que este servicio depende de otro para iniciar, en este caso espera a la base de datos
+    depends_on:
+      db:
+        # Espera que la base de datos no solo esté iniciada, sino funcionando correctamente
+        condition: service_healthy
+    # restart indica qué hacer si el backend falla.
+    # on-failure hace que intente iniciarse nuevamente
+    restart: on-failure
+
+
+  # BASE DE DATOS
+  # Guarda la información del sistema.
+  db:
+    # image indica qué imagen se usará para crear esta parte del sistema, en este caso MySQL versión 8
+    image: mysql:8
+    # Nombre del contenedor para identificarlo fácilmente, administrarlo o ver sus registros).
+    container_name: tienda-db
+    # environment guarda datos que la base de datos necesita para funcionar
+    environment:
+
+      # MYSQL_ROOT_PASSWORD toma desde .env la contraseña del usuario administrador
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      # MYSQL_DATABASE toma desde .env el nombre de la base de datos que se creará
+      MYSQL_DATABASE: ${DB_NAME}
+
+    # volumes define información que debe guardarse aunque se apague el contenedor
+    volumes:
+      # Guarda los datos de la base de datos para que no se pierdan
+      - dbdata:/var/lib/mysql
+      # Carga y ejecuta automáticamente el archivo init.sql al iniciar
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+    # healthcheck define qué comando usar para verificar que MySQL esté listo
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+
+
+  # SERVICIO INFO
+  # Muestra por consola las direcciones disponibles del sistema.
+  info:
+    # image indica que usa Alpine, una imagen simple para ejecutar comandos básicos
+    image: alpine
+    # container_name le da un nombre fijo al contenedor
+    container_name: tienda-info
+
+    # depends_on indica que este servicio espera que frontend, backend y base de datos estén iniciados
+    depends_on:
+      - frontend
+      - backend
+      - db
+
+    # environment toma desde .env los puertos que se mostrarán en pantalla
+    environment:
+      FRONTEND_PORT: ${FRONTEND_PORT}
+      BACKEND_PORT: ${BACKEND_PORT}
+      DB_PORT: ${DB_PORT}
+
+    # command indica los comandos que ejecutará este contenedor, en este caso texto y las URLs
+    command: >
+      sh -c "
+        echo '========================================';
+        echo '   Servicios disponibles';
+        echo '========================================';
+        echo '  Frontend  -> http://localhost:${FRONTEND_PORT}';
+        echo '  Backend   -> http://localhost:${BACKEND_PORT}';
+        echo '  Base de datos (MySQL) -> localhost:${DB_PORT}';
+        echo '========================================'
+      "
+    # restart: no indica que este servicio se ejecuta una sola vez y no se reinicia
+    restart: "no"
+
+volumes:
+  # Espacio donde se guardan los datos de la base de datos
+  dbdata:
